@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "soft-quota"
+version = "0.1.0"
+description = "Soft quota / usage limit component (non-strongly-consistent). Repository abstractions; in-memory impl included."
+readme = "README.md"
+packages = [{ include = "soft_quota" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8"
+pytest-asyncio = "^0.26"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

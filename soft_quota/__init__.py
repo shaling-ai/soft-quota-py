@@ -10,10 +10,11 @@ from soft_quota.repositories import (
     QuotaRuleRepository,
     UsageAuditRepository,
 )
-from soft_quota.service import PolicyResolver, QuotaService
+from soft_quota.service import AsyncPolicyResolver, PolicyResolver, QuotaService
 from soft_quota.time_window import get_window_for_period
 
 __all__ = [
+    "AsyncPolicyResolver",
     "CheckResult",
     "MetricEventMapping",
     "NoRuleFound",

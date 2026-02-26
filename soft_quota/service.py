@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -14,12 +15,13 @@ from soft_quota.repositories import (
 from soft_quota.time_window import get_window_for_period
 
 PolicyResolver = Callable[[str, str], str | None]
+AsyncPolicyResolver = Callable[[str, str], Awaitable[str | None]]
 
 
 class QuotaService:
     """
     Soft quota: check before action, record after success.
-    policy_resolver(subject_type, subject_id) -> policy_ref; no policy_ref => deny by default.
+    policy_resolver (sync) or async_policy_resolver: (subject_type, subject_id) -> policy_ref.
     """
 
     def __init__(
@@ -27,12 +29,22 @@ class QuotaService:
         usage_audit_repo: UsageAuditRepository,
         rule_repo: QuotaRuleRepository,
         metric_events: MetricEventMapping,
-        policy_resolver: PolicyResolver,
+        policy_resolver: PolicyResolver | None = None,
+        async_policy_resolver: AsyncPolicyResolver | None = None,
     ) -> None:
+        if (policy_resolver is None) == (async_policy_resolver is None):
+            raise ValueError("Exactly one of policy_resolver or async_policy_resolver must be set")
         self._usage = usage_audit_repo
         self._rules = rule_repo
         self._metric_events = metric_events
         self._policy_resolver = policy_resolver
+        self._async_policy_resolver = async_policy_resolver
+
+    async def _resolve_policy_ref(self, subject_type: str, subject_id: str) -> str | None:
+        if self._async_policy_resolver is not None:
+            return await self._async_policy_resolver(subject_type, subject_id)
+        assert self._policy_resolver is not None
+        return self._policy_resolver(subject_type, subject_id)
 
     async def get_applicable_rule(
         self,
@@ -66,10 +78,9 @@ class QuotaService:
         scope: str,
     ) -> CheckResult:
         """
-        Resolve policy_ref, get rule, compute usage in window; return allowed or not.
-        No rule => allowed. No policy_ref => denied (configurable later).
+        Resolve policy_ref (sync or await async resolver), get rule, compute usage; return allowed or not.
         """
-        policy_ref = self._policy_resolver(subject_type, subject_id)
+        policy_ref = await self._resolve_policy_ref(subject_type, subject_id)
         rule = await self.get_applicable_rule(policy_ref, metric, scope)
         if rule is None:
             return CheckResult(allowed=True)
@@ -89,6 +100,26 @@ class QuotaService:
                 current=usage,
             )
         return CheckResult(allowed=True)
+
+    async def check_quotas(
+        self,
+        subjects: list[tuple[str, str]],
+        metric: str,
+    ) -> CheckResult:
+        """
+        Check quota for each subject; scope = subject_type. policy_ref resolved per subject.
+        Returns first disallowed result, or allowed if all pass / no subjects.
+        """
+        if not subjects:
+            return CheckResult(allowed=True)
+        last: CheckResult | None = None
+        for st, si in subjects:
+            scope = st
+            result = await self.check_quota(st, si, metric, scope)
+            last = result
+            if not result.allowed:
+                return result
+        return last or CheckResult(allowed=True)
 
     async def record_usage(
         self,

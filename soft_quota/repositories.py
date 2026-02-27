@@ -47,6 +47,10 @@ class MetricEventMapping(Protocol):
         """Return [(event_type, weight), ...]. Weight default 1."""
         ...
 
+    def get_metric_by_event(self, event: str) -> str:
+        """Resolve event_type to rule metric (for merged metrics). Default: return event."""
+        ...
+
 
 # --- In-memory implementations ---
 
@@ -123,13 +127,19 @@ class InMemoryQuotaRuleRepository:
 
 
 class InMemoryMetricEventMapping:
-    """In-memory metric -> [(event_type, weight)]."""
+    """In-memory metric -> [(event_type, weight)]; maintains event -> metric for get_metric_by_event."""
 
     def __init__(self) -> None:
         self._m: dict[str, list[tuple[str, int]]] = {}
+        self._event_to_metric: dict[str, str] = {}
 
     def set_events(self, metric: str, events: list[tuple[str, int]]) -> None:
         self._m[metric] = list(events)
+        for ev, _ in events:
+            self._event_to_metric[ev] = metric
 
     def get_events_and_weights(self, metric: str) -> list[tuple[str, int]]:
         return self._m.get(metric, [])
+
+    def get_metric_by_event(self, event: str) -> str:
+        return self._event_to_metric.get(event, event)

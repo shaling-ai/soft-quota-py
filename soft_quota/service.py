@@ -108,8 +108,10 @@ class QuotaService:
     ) -> CheckResult:
         """
         Check quota for each subject; scope = subject_type. policy_ref resolved per subject.
+        metric can be a metric name or an event_type — auto-resolved via get_metric_by_event.
         Returns first disallowed result, or allowed if all pass / no subjects.
         """
+        metric = self._metric_events.get_metric_by_event(metric)
         if not subjects:
             return CheckResult(allowed=True)
         last: CheckResult | None = None
